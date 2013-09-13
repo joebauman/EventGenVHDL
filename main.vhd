@@ -39,9 +39,9 @@ entity main is
 end main;
 
 architecture Behavioral of main is
-    constant MIN_SPAN : unsigned ( 15 downto 0 ) := X"0258"; -- 600
+    constant MIN_SPAN : unsigned ( 15 downto 0 ) := X"0258"; -- 600 -> 10us
 
-    signal eventSpan : unsigned ( 31 downto 0 ) := X"00000000";
+    signal eventSpan : unsigned ( 15 downto 0 ) := X"0000";
     signal eventPeak : unsigned ( 7 downto 0 ) := X"00";
 
     signal count : unsigned ( 27 downto 0 ) := X"0000000";
@@ -70,7 +70,7 @@ begin
                     LED146 <= '1';
                     inEvent <= true;
 
-                    eventSpan <= X"00000000";
+                    eventSpan <= X"0000";
                     eventPeak <= unsigned( ADC_DATA );
                 end if;
 
@@ -78,7 +78,7 @@ begin
 
                 eventSpan <= eventSpan + 1;
 
-                if eventSpan > X"00000258" then
+                if eventSpan > MIN_SPAN then
                     STATPIN <= '1';
                 end if;
 
