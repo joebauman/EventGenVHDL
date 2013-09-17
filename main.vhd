@@ -34,6 +34,7 @@ entity main is
            LED146 : out STD_LOGIC;
            LED147 : out STD_LOGIC;
            STATPIN : out STD_LOGIC;
+           XMIT : out STD_LOGIC;
            BUTTON : in STD_LOGIC;
            ADC_CLK : in STD_LOGIC;
            ADC_DATA : in STD_LOGIC_VECTOR( 7 downto 0 ) );
@@ -52,16 +53,73 @@ architecture Behavioral of main is
     -- Serial port items
     signal baudCount : unsigned ( 15 downto 0 );
     signal baudClk : STD_LOGIC;
+
+    type SER_BUFFER is array( 63 downto 0 ) of STD_LOGIC_VECTOR( 7 downto 0 );
+    signal xmitBuffer : SER_BUFFER;
+    signal xmitInIndex : unsigned( 5 downto 0 ) := ( others => '0' );
+    signal xmitOutIndex : unsigned( 5 downto 0 ) := ( others => '0' );
+    signal xmitState : unsigned( 1 downto 0 ) := ( others => '0' );
+
 begin
 
+    -- Generate the RS-232 baud rate clock
     baudTick : process( ADC_CLK )
     begin
         if( rising_edge( ADC_CLK ) ) then
             baudCount <= baudCount + 63;
-            baudClk <= baudCount( 15 );
+            baudClk <= baudCount( 14 );
         end if;
     end process baudTick;
 
+    transmit : process( baudClk )
+        variable shiftCount : unsigned( 3 downto 0 );
+        variable xmitByte : STD_LOGIC_VECTOR( 7 downto 0 );
+    begin
+        if( rising_edge( baudClk ) ) then
+            case xmitState is
+                when "00" => -- Wait state
+                    XMIT <= '1';
+
+                    xmitInIndex <= ( xmitInIndex + 1 ) mod 64;
+
+                    if( xmitOutIndex /= xmitInIndex ) then
+                        xmitState <= "01";
+
+    --                    xmitByte := xmitBuffer( to_integer( xmitOutIndex ) );
+                        xmitByte := X"4A";
+
+                        xmitOutIndex <= ( xmitOutIndex + 1 ) mod 64;
+                    end if;
+
+                when "01" => -- Start bit
+                    XMIT <= '0';
+
+                    shiftCount := "0000";
+
+                    xmitState <= "10";
+
+                when "10" => -- Data bits
+                    XMIT <= xmitByte( to_integer( shiftCount ) );
+
+                    shiftCount := shiftCount + 1;
+
+                    if shiftCount = "1000" then
+                        xmitState <= "11";
+                    end if;
+
+                when "11" => -- Stop bit
+                    XMIT <= '1';
+
+                    xmitState <= "00";
+
+                when others => -- Invalid
+                    xmitState <= "00";
+
+            end case;
+        end if; -- rising_edge( baudClk )
+    end process transmit;
+
+    -- Count up and generate a "pulse" blink
     countUp : process( ADC_CLK )
     begin
         if( rising_edge( ADC_CLK ) ) then
@@ -75,6 +133,7 @@ begin
         end if;
     end process countUp;
 
+    -- Look for analog events and measure peak and span
     checkADC : process( ADC_CLK )
     begin
         if rising_edge( ADC_CLK ) then
@@ -93,9 +152,9 @@ begin
                 eventSpan <= eventSpan + 1;
 
                 if eventSpan > MIN_SPAN and eventSpan < MAX_SPAN then
---                    STATPIN <= '1';
+                    STATPIN <= '1';
                 else
---                    STATPIN <= '0';
+                    STATPIN <= '0';
                 end if;
 
                 if eventPeak < unsigned( ADC_DATA ) then
@@ -105,12 +164,12 @@ begin
                 if ADC_DATA( 7 ) = '0' then -- Event end
 
                     if eventPeak > X"A0" then
-                        LED146 <= '1';
+--                        LED146 <= '1';
                     else
-                        LED146 <= '0';
+--                        LED146 <= '0';
                     end if;
 
---                    STATPIN <= '0';
+                    STATPIN <= '0';
                     inEvent <= false;
                 end if;
 
